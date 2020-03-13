@@ -124,9 +124,11 @@ const char *requestPin(PinMatrixRequestType type, const char *text) {
     if (msg_tiny_id == MessageType_MessageType_PinMatrixAck) {
       msg_tiny_id = 0xFFFF;
       PinMatrixAck *pma = (PinMatrixAck *)msg_tiny;
-      pinmatrix_done(pma->pin);  // convert via pinmatrix
       usbTiny(0);
-      return pma->pin;
+      if (sectrue == pinmatrix_done(pma->pin))  // convert via pinmatrix
+        return pma->pin;
+      else
+        return 0;
     }
     // check for Cancel / Initialize
     protectAbortedByCancel = (msg_tiny_id == MessageType_MessageType_Cancel);
