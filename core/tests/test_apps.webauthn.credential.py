@@ -1,7 +1,7 @@
 from common import *
 import storage
 from apps.common import mnemonic
-from apps.webauthn.credential import Fido2Credential
+from apps.webauthn.credential import Fido2Credential, truncate_utf8
 from trezor.crypto.curve import nist256p1
 from trezor.crypto.hashlib import sha256
 
@@ -58,6 +58,42 @@ class TestCredential(unittest.TestCase):
         # Check credential keys.
         self.assertEqual(hexlify(cred.hmac_secret_key()), cred_random)
         self.assertEqual(hexlify(cred.public_key()), public_key)
+
+    def test_truncation(self):
+        self.assertEqual(truncate_utf8("", 3), "")
+        self.assertEqual(truncate_utf8("a", 3), "a")
+        self.assertEqual(truncate_utf8("ab", 3), "ab")
+        self.assertEqual(truncate_utf8("abc", 3), "abc")
+        self.assertEqual(truncate_utf8("abcd", 3), "abc")
+        self.assertEqual(truncate_utf8("abcde", 3), "abc")
+        self.assertEqual(truncate_utf8("a\u0123", 3), "a\u0123")  # b'a\xc4\xa3'
+        self.assertEqual(truncate_utf8("a\u1234", 3), "a")  # b'a\xe1\x88\xb4'
+        self.assertEqual(truncate_utf8("ab\u0123", 3), "ab")  # b'ab\xc4\xa3'
+        self.assertEqual(truncate_utf8("ab\u1234", 3), "ab")  # b'ab\xe1\x88\xb4'
+        self.assertEqual(truncate_utf8("abc\u0123", 3), "abc")  # b'abc\xc4\xa3'
+        self.assertEqual(truncate_utf8("abc\u1234", 3), "abc")  # b'abc\xe1\x88\xb4'
+        self.assertEqual(truncate_utf8("\u1234\u5678", 0), "")  # b'\xe1\x88\xb4\xe5\x99\xb8
+        self.assertEqual(truncate_utf8("\u1234\u5678", 1), "")  # b'\xe1\x88\xb4\xe5\x99\xb8
+        self.assertEqual(truncate_utf8("\u1234\u5678", 2), "")  # b'\xe1\x88\xb4\xe5\x99\xb8
+        self.assertEqual(truncate_utf8("\u1234\u5678", 3), "\u1234")  # b'\xe1\x88\xb4\xe5\x99\xb8
+        self.assertEqual(truncate_utf8("\u1234\u5678", 4), "\u1234")  # b'\xe1\x88\xb4\xe5\x99\xb8
+        self.assertEqual(truncate_utf8("\u1234\u5678", 5), "\u1234")  # b'\xe1\x88\xb4\xe5\x99\xb8
+        self.assertEqual(truncate_utf8("\u1234\u5678", 6), "\u1234\u5678")  # b'\xe1\x88\xb4\xe5\x99\xb8
+        self.assertEqual(truncate_utf8("\u1234\u5678", 7), "\u1234\u5678")  # b'\xe1\x88\xb4\xe5\x99\xb8
+
+        cred = Fido2Credential()
+        cred.truncate_names()
+        self.assertIsNone(cred.rp_name)
+        self.assertIsNone(cred.user_name)
+        self.assertIsNone(cred.user_display_name)
+
+        cred.rp_name = "a" * 62 + "\u0123"
+        cred.user_name = "a" * 63 + "\u0123"
+        cred.user_display_name = "a" * 64 + "\u0123"
+        cred.truncate_names()
+        self.assertEqual(cred.rp_name, "a" * 62 + "\u0123")
+        self.assertEqual(cred.user_name, "a" * 63)
+        self.assertEqual(cred.user_display_name, "a" * 64)
 
 if __name__ == '__main__':
     unittest.main()

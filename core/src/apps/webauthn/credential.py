@@ -18,6 +18,9 @@ _CRED_ID_VERSION = b"\xf1\xd0\x02\x00"
 _CRED_ID_MIN_LENGTH = const(33)
 _KEY_HANDLE_LENGTH = const(64)
 
+# Maximum supported length of the RP name, user name or user displayName in bytes.
+_NAME_MAX_LENGTH = const(64)
+
 # Credential ID keys
 _CRED_ID_RP_ID = const(1)
 _CRED_ID_RP_NAME = const(2)
@@ -42,6 +45,20 @@ _CURVE_NAME = {
 
 # Key paths
 _U2F_KEY_PATH = const(0x80553246)
+
+
+def truncate_utf8(string: str, max_bytes: int) -> str:
+    """Truncate the codepoints of a string so that its UTF-8 encoding is at most `max_bytes` in length."""
+    data = string.encode()
+    if len(data) <= max_bytes:
+        return string
+
+    # Find the starting position of the last codepoint in data[0 : max_bytes + 1].
+    i = max_bytes
+    while i >= 0 and data[i] & 0xC0 == 0x80:
+        i -= 1
+
+    return data[:i].decode()
 
 
 class Credential:
@@ -207,6 +224,18 @@ class Fido2Credential(Credential):
             raise ValueError  # data consistency check failed
 
         return cred
+
+    def truncate_names(self) -> None:
+        if self.rp_name:
+            self.rp_name = truncate_utf8(self.rp_name, _NAME_MAX_LENGTH)
+
+        if self.user_name:
+            self.user_name = truncate_utf8(self.user_name, _NAME_MAX_LENGTH)
+
+        if self.user_display_name:
+            self.user_display_name = truncate_utf8(
+                self.user_display_name, _NAME_MAX_LENGTH
+            )
 
     def check_required_fields(self) -> bool:
         return (
